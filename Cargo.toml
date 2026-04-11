@@ -5,10 +5,6 @@ edition = "2021"
 authors = ["Jeremy Soller <jackpot51@gmail.com>"]
 
 [[bin]]
-name = "dhcpd"
-path = "src/dhcpd/main.rs"
-
-[[bin]]
 name = "dns"
 path = "src/dns/main.rs"
 
