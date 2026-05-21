@@ -1,7 +1,6 @@
-use std::io::{stdin, Read, Write};
+use std::io::{self, stdin, Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::process::exit;
-use std::str;
 use std::thread;
 
 macro_rules! print_err {
@@ -20,48 +19,57 @@ macro_rules! print_err {
 // TODO: variable buffer size?
 const BUFFER_SIZE: usize = 65636;
 
-/// Read from the input file into a buffer in an infinite loop.
+/// Read from the input file into a buffer until EOF.
 /// Handle the buffer content with handler function.
-fn rw_loop<R, F>(input: &mut R, mut handler: F) -> !
+fn rw_loop<R, F>(input: &mut R, mut handler: F) -> Result<(), String>
 where
     R: Read,
-    F: FnMut(&[u8], usize),
+    F: FnMut(&[u8]) -> Result<(), String>,
 {
     loop {
         let mut buffer = [0u8; BUFFER_SIZE];
         // TODO: improve error messages
         let count = match input.read(&mut buffer) {
-            Ok(0) => {
-                print_err!("End of input file/socket.");
-                exit(0);
-            }
+            Ok(0) => return Ok(()),
             Ok(c) => c,
-            Err(_) => {
-                print_err!("Error occurred while reading from file/socket.");
-                exit(1);
+            Err(e) => {
+                return Err(format!(
+                    "Error occurred while reading from file/socket: {e}"
+                ))
             }
         };
-        handler(&buffer, count);
+        handler(&buffer[..count])?;
     }
 }
 
 /// Use the rw_loop in both direction (TCP connection)
 fn both_dir_rw_loop(mut stream_read: TcpStream, mut stream_write: TcpStream) -> Result<(), String> {
-    // Read loop
-    thread::spawn(move || {
-        rw_loop(&mut stream_read, |buffer, count| {
-            print!("{}", unsafe { str::from_utf8_unchecked(&buffer[..count]) });
-        });
+    let read_thread = thread::spawn(move || {
+        let mut stdout = io::stdout();
+        rw_loop(&mut stream_read, |buffer| {
+            stdout
+                .write_all(buffer)
+                .map_err(|e| format!("Error occurred while writing into stdout: {e}"))?;
+            stdout
+                .flush()
+                .map_err(|e| format!("Error occurred while flushing stdout: {e}"))
+        })
     });
 
-    // Write loop
-    let mut stdin = stdin();
-    rw_loop(&mut stdin, |buffer, count| {
-        let _ = stream_write.write(&buffer[..count]).unwrap_or_else(|e| {
-            print_err!("Error occurred while writing into socket: {e} ");
-            exit(1);
-        });
+    thread::spawn(move || {
+        let mut stdin = stdin();
+        if let Err(e) = rw_loop(&mut stdin, |buffer| {
+            stream_write
+                .write_all(buffer)
+                .map_err(|e| format!("Error occurred while writing into socket: {e}"))
+        }) {
+            print_err!("{e}");
+        }
     });
+
+    read_thread
+        .join()
+        .map_err(|_| "TCP socket read thread panicked".to_string())?
 }
 
 /// Connect to listening TCP socket
@@ -116,18 +124,19 @@ pub fn connect_udp(host: &str) -> Result<(), String> {
 
     // Read from stdin and send data via UDP
     let mut stdin = stdin();
-    rw_loop(&mut stdin, |buffer, count| {
-        socket.send(&buffer[..count]).unwrap_or_else(|e| {
-            eprintln!("Error occurred while writing into socket: {e}");
-            exit(1); // Exit on send error
-        });
-    });
+    rw_loop(&mut stdin, |buffer| {
+        socket
+            .send(buffer)
+            .map(|_| ())
+            .map_err(|e| format!("Error occurred while writing into socket: {e}"))
+    })
 }
 
 /// Listen for UDP datagrams on the specified socket
 pub fn listen_udp(host: &str) -> Result<(), String> {
     let socket = UdpSocket::bind(host)
         .map_err(|e| format!("connect_udp error: could not bind to local socket ({e})"))?;
+    let mut stdout = io::stdout();
     loop {
         let mut buffer = [0u8; BUFFER_SIZE];
         let count = match socket.recv_from(&mut buffer) {
@@ -141,14 +150,46 @@ pub fn listen_udp(host: &str) -> Result<(), String> {
                 exit(1);
             }
         };
-        print!("{}", unsafe { str::from_utf8_unchecked(&buffer[..count]) });
+        stdout
+            .write_all(&buffer[..count])
+            .map_err(|e| format!("Error occurred while writing into stdout: {e}"))?;
+        stdout
+            .flush()
+            .map_err(|e| format!("Error occurred while flushing stdout: {e}"))?;
     }
 }
 
 //TODO: write some unit tests
 #[cfg(test)]
 mod tests {
+    use super::rw_loop;
+    use std::io::Cursor;
 
     #[test]
-    fn pass() {}
+    fn rw_loop_returns_on_eof() {
+        let mut input = Cursor::new(Vec::new());
+        let mut called = false;
+
+        rw_loop(&mut input, |_| {
+            called = true;
+            Ok(())
+        })
+        .unwrap();
+
+        assert!(!called);
+    }
+
+    #[test]
+    fn rw_loop_passes_read_bytes_to_handler() {
+        let mut input = Cursor::new(b"test".to_vec());
+        let mut output = Vec::new();
+
+        rw_loop(&mut input, |buffer| {
+            output.extend_from_slice(buffer);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(output, b"test");
+    }
 }
