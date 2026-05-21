@@ -115,22 +115,43 @@ pub fn list_all_interfaces() -> Result<Vec<NetworkInterface>, InterfaceError> {
         return Ok(vec![]); // Return an empty list if no interfaces directory exists
     }
 
+    let iface_names = match fs::read_to_string(path) {
+        Ok(data) => parse_iface_names(&data),
+        Err(_) => list_iface_names_from_dir(path)?,
+    };
+
+    let mut interfaces = Vec::new();
+    for iface_name in iface_names {
+        // Try to create a NetworkInterface instance
+        match NetworkInterface::new(&iface_name) {
+            Ok(interface) => interfaces.push(interface),
+            Err(e) => eprintln!("Skipping interface '{iface_name}': {e}"),
+        }
+    }
+    Ok(interfaces)
+}
+
+fn parse_iface_names(data: &str) -> Vec<String> {
+    data.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn list_iface_names_from_dir(path: &Path) -> Result<Vec<String>, InterfaceError> {
     let entries = fs::read_dir(path)
         .map_err(|e| InterfaceError::ReadError(format!("Failed to read interfaces: {e}")))?;
 
-    let mut interfaces = Vec::new();
+    let mut iface_names = Vec::new();
     for entry in entries {
         let entry =
             entry.map_err(|e| InterfaceError::ReadError(format!("Failed to read entry: {e}")))?;
         if let Some(iface_name) = entry.file_name().to_str() {
-            // Try to create a NetworkInterface instance
-            match NetworkInterface::new(iface_name) {
-                Ok(interface) => interfaces.push(interface),
-                Err(e) => eprintln!("Skipping interface '{iface_name}': {e}"),
-            }
+            iface_names.push(iface_name.to_string());
         }
     }
-    Ok(interfaces)
+    Ok(iface_names)
 }
 
 /// Validates the format of a MAC address
@@ -184,5 +205,11 @@ mod tests {
         assert!(validate_ip_address("255.255.255.255").is_ok());
         assert!(validate_ip_address("999.999.999.999").is_err());
         assert!(validate_ip_address("::1").is_ok()); // IPv6 loopback
+    }
+
+    #[test]
+    fn test_parse_iface_names() {
+        assert_eq!(parse_iface_names("eth0\nlo\n"), vec!["eth0", "lo"]);
+        assert_eq!(parse_iface_names("\n eth0 \n\n"), vec!["eth0"]);
     }
 }
