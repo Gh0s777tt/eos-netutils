@@ -1,6 +1,32 @@
-# netutils
-Network Utilities for Redox
+# eos-netutils
 
-[![Travis Build Status](https://travis-ci.org/redox-os/netutils.svg?branch=master)](https://travis-ci.org/redox-os/netutils)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+**E-OS fork of [`redox-os/netutils`](https://gitlab.redox-os.org/redox-os/netutils).** Part of the [**E-OS**](https://github.com/Gh0s777tt/E-OS) ecosystem — a hardened, Crimson-branded downstream of [Redox OS](https://www.redox-os.org).
 
+This repository is Redox **networking utilities** (`dhcpd`, `dns`, `ping`, …).
+
+## E-OS changes vs upstream
+
+_None yet_ — pinned to a clean upstream commit. E-OS branding and config for this component are applied via **recipe patches in the [main repo](https://github.com/Gh0s777tt/E-OS)**, not fork commits.
+
+## How it's pinned
+
+The E-OS build pins this fork in [`recipes/core/netutils/recipe.toml`](https://github.com/Gh0s777tt/E-OS/blob/main/recipes/core/netutils/recipe.toml):
+
+- branch **`master`** · rev **`ffea9718d425`**
+- up to date with upstream
+
+## Build standalone
+
+This fork is normally built by the E-OS cookbook (`make CI=1 …` in the [main repo](https://github.com/Gh0s777tt/E-OS)). To build it on its own you need the Redox toolchain; see the main repo's [build guide](https://github.com/Gh0s777tt/E-OS/blob/main/docs/building.md).
+
+## Hosting
+
+**GitLab (source of truth):** https://gitlab.com/e-os/eos-netutils  
+**GitHub (read-only mirror):** https://github.com/Gh0s777tt/eos-netutils
+
+## License
+
+MIT (inherited from upstream Redox). The E-OS project as a whole is AGPL-3.0; see the [main repo](https://github.com/Gh0s777tt/E-OS/blob/main/LICENSE).
+
+---
+[E-OS main repo](https://github.com/Gh0s777tt/E-OS) · [Docs](https://github.com/Gh0s777tt/E-OS/tree/main/docs) · [Upstream](https://gitlab.redox-os.org/redox-os/netutils)
